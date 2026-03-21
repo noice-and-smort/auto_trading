@@ -5,6 +5,7 @@ NSEIndices website
 """
 
 import itertools
+from io import StringIO
 from urllib.parse import urljoin
 from jugaad_data import util as ut
 import pandas as pd
@@ -189,9 +190,35 @@ def stock_df(h, symbol, from_date, to_date, series='EQ'):
   raw = stock_raw(symbol, from_date, to_date, series)
   df = pd.DataFrame(raw)[stock_select_headers]
   df.columns = stock_final_headers
-  df['DELIVERABLE'] = 0  # Default value as it's missing in new API
-  for i, h in enumerate(stock_final_headers):
-    df[h] = df[h].apply(stock_dtypes[i])
+  for i, header in enumerate(stock_final_headers):
+    df[header] = df[header].apply(stock_dtypes[i])
+
+  # Natively fetch deliverables via CSV endpoint as NSE removed it from json
+  try:
+      d_url = f"https://www.nseindia.com/api/historicalOR/generateSecurityWiseHistoricalData?from={from_date.strftime('%d-%m-%Y')}&to={to_date.strftime('%d-%m-%Y')}&symbol={symbol}&type=priceVolumeDeliverable&series=ALL&csv=true"
+      h.s.headers.update({"Referer": "https://www.nseindia.com/report-detail/eq_security"})
+      csv_text = h.s.get(d_url, timeout=10).text
+      
+      if csv_text and '"Date' in csv_text:
+          dly_raw = pd.read_csv(StringIO(csv_text))
+          dly_raw.columns = [c.strip() for c in dly_raw.columns]
+          dly_raw['join_date'] = pd.to_datetime(dly_raw['Date']).dt.date
+          df['join_date'] = pd.to_datetime(df['DATE']).dt.date
+          
+          # Map percentage metric 
+          dmap = dly_raw.set_index('join_date')['% Dly Qt to Traded Qty'].to_dict()
+          df['DELIVERABLE'] = df['join_date'].map(dmap)
+          
+          # Clean string formats
+          df['DELIVERABLE'] = df['DELIVERABLE'].replace({',': '', '-': '0'}, regex=True)
+          df['DELIVERABLE'] = pd.to_numeric(df['DELIVERABLE'], errors='coerce').fillna(0.0)
+          df.drop(columns=['join_date'], inplace=True)
+      else:
+          df['DELIVERABLE'] = 0.0
+  except Exception as e:
+      print(f"Failed to fetch deliverables for {symbol}: {e}")
+      df['DELIVERABLE'] = 0.0
+
   df['DELIVERABLE'] = df['DELIVERABLE'].apply(ut.np_float)
   df = df.sort_values(by='DATE')
   return df
