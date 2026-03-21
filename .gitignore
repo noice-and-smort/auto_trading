@@ -1,0 +1,11 @@
+venv/
+.env
+__pycache__/
+*.pyc
+output/
+latest.csv
+.DS_Store
+.cache/
+test_*.py
+stocks
+test_api*.py
