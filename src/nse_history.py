@@ -88,6 +88,7 @@ class NSEHistory:
     j = self.r.json()
     return j
 
+  @ut.cached(APP_NAME + '-option_chain')
   def _option_chain(self, symbol, expiry_date):
     params = {
         'functionName': 'getOptionChainData',
@@ -100,11 +101,15 @@ class NSEHistory:
     j = self.r.json()
     return j
 
-  def _deliverables(self, symbol, from_date, to_date, dates_series):
-    try:
+  @ut.cached(APP_NAME + '-deliverables')
+  def _deliverables_raw(self, symbol, from_date, to_date):
       d_url = f"https://www.nseindia.com/api/historicalOR/generateSecurityWiseHistoricalData?from={from_date.strftime('%d-%m-%Y')}&to={to_date.strftime('%d-%m-%Y')}&symbol={symbol}&type=priceVolumeDeliverable&series=ALL&csv=true"
       self.s.headers.update({"Referer": "https://www.nseindia.com/report-detail/eq_security"})
-      csv_text = self.s.get(d_url, timeout=10).text
+      return self.s.get(d_url, timeout=10).text
+
+  def _deliverables(self, symbol, from_date, to_date, dates_series):
+    try:
+      csv_text = self._deliverables_raw(symbol, from_date, to_date)
       
       if csv_text and '"Date' in csv_text:
           dly_raw = pd.read_csv(StringIO(csv_text))
