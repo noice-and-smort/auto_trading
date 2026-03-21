@@ -72,15 +72,3 @@ Your script calculates several advanced derivative metrics to predict market sen
   - *What it means:* The ratio of Traded Put Volume to Call Volume.
   - *Market Prediction:* This is a classic contrarian indicator. A very high PCR implies extreme retail bearishness, which often marks a market bottom (bullish reversal).
 
-### Suggested Additional Improvements to Predict Markets
-
-If you want to upgrade your algorithm to be even more predictive, consider calculating these new fields:
-
-1. **VWAP-Close Delta (`(Close - VWAP) / VWAP * 100`):**
-   - Comparing the Closing Price to the Volume Weighted Average Price reveals late-day institutional action. If `Close > VWAP`, it signifies strong last-hour buying pressure.
-2. **Open Interest PCR (OI Put-Call Ratio):**
-   - Right now, your script calculates *Volume* PE/CE ratio. Fetching the total outstanding *Open Interest* for Puts vs Calls across the nearest strikes offers a much stickier map of where major Option Writers (smart money) are sitting.
-3. **Rollover Percentage:**
-   - During the last week of the month, evaluating `Next Month OI / (Current OI + Next Month OI)` tracks how aggressively institutions are rolling their bets into the next month versus closing them out.
-4. **Z-Score of Deliverable Volume:**
-   - Instead of just a ratio, calculating the standard deviations (Z-score) of today's deliverable quantity against the 60-day rolling mean dynamically signals statistical anomalies in accumulation.
