@@ -45,3 +45,42 @@ The easiest way to invoke this persistently on Unix systems is via the provided 
 ```bash
 bash run.sh
 ```
+
+## Understanding the Calculated Ratios & Metrics
+
+Your script calculates several advanced derivative metrics to predict market sentiment:
+
+- **F1 (Change in OI %):** `(Change in OI * 100) / Open Interest`
+  - *What it means:* The percentage change in Open Interest for the current month's contract.
+  - *Market Prediction:* A high positive F1 with a rising price indicates a strong **Long Buildup** (bullish). A high positive F1 with a falling price indicates a **Short Buildup** (bearish). Negative F1 represents unwinding (closing positions).
+- **F7 (Volume to OI Ratio):** `Number of Contracts / (Change in OI / lot_size)`
+  - *What it means:* How much trading volume (churn) was required to generate the net change in open positions.
+  - *Market Prediction:* A low F7 means most of the volume resulted in new open positions (high conviction). A very high F7 implies heavy intraday day-trading with little net positional commitment. 
+- **F8 (Blended OI Change %):** `Total Change in OI (Current + Next) * 100 / Total Open Interest`
+  - *What it means:* Similar to F1, but blends the current and next month's contracts.
+  - *Market Prediction:* Highly useful during expiry week to smooth out the noise of "rollovers". It gives a truer picture of overall positional buildup across maturities.
+- **F9 (Absolute OI Contract Change):** `(Change in OI + Change in OI Next) / lot_size`
+  - *What it means:* The absolute net change in Open Interest, expressed in raw number of contracts.
+  - *Market Prediction:* Provides the pure volume of newly added positions. Helpful for comparing positional aggression across different stocks regardless of their wildly different lot sizes.
+- **Deliverable Ratio:** `(Turnover * Deliverable) / (60-Day Avg Turnover * 60-Day Avg Deliverable)`
+  - *What it means:* Compares today's actual delivery buying to its historical 60-day average.
+  - *Market Prediction:* A ratio `> 1.0` (especially `> 1.5`) is a massive footprint of institutional accumulation/distribution. A spike here often precedes extremely strong directional moves.
+- **Future Cash Ratio:** `Future Turnover / Cash Turnover`
+  - *What it means:* Measures the speculative trading interest (Futures) vs investment interest (Equities).
+  - *Market Prediction:* Abnormally high speculative interest can signify excessive leverage, often leading to sharp short-covering or long-unwinding volatile moves.
+- **Option Ratios (PE/CE):** 
+  - *What it means:* The ratio of Traded Put Volume to Call Volume.
+  - *Market Prediction:* This is a classic contrarian indicator. A very high PCR implies extreme retail bearishness, which often marks a market bottom (bullish reversal).
+
+### Suggested Additional Improvements to Predict Markets
+
+If you want to upgrade your algorithm to be even more predictive, consider calculating these new fields:
+
+1. **VWAP-Close Delta (`(Close - VWAP) / VWAP * 100`):**
+   - Comparing the Closing Price to the Volume Weighted Average Price reveals late-day institutional action. If `Close > VWAP`, it signifies strong last-hour buying pressure.
+2. **Open Interest PCR (OI Put-Call Ratio):**
+   - Right now, your script calculates *Volume* PE/CE ratio. Fetching the total outstanding *Open Interest* for Puts vs Calls across the nearest strikes offers a much stickier map of where major Option Writers (smart money) are sitting.
+3. **Rollover Percentage:**
+   - During the last week of the month, evaluating `Next Month OI / (Current OI + Next Month OI)` tracks how aggressively institutions are rolling their bets into the next month versus closing them out.
+4. **Z-Score of Deliverable Volume:**
+   - Instead of just a ratio, calculating the standard deviations (Z-score) of today's deliverable quantity against the 60-day rolling mean dynamically signals statistical anomalies in accumulation.
