@@ -234,7 +234,12 @@ async def handle_text_message(update: Update, context: CallbackContext) -> None:
         f"User {user.first_name} ({user.id}) requested to empty the cache."
     )
     try:
-      app_names = ["nsehistory-derivatives", "nsehistory-stock"]
+      app_names = [
+          "nsehistory-derivatives",
+          "nsehistory-stock",
+          "nsehistory-option_chain",
+          "nsehistory-deliverables",
+      ]
       for app_name in app_names:
         cache_path = user_cache_dir(app_name, app_name)
         if not os.path.isdir(cache_path):
