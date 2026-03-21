@@ -227,12 +227,8 @@ def run_once(h, stock, time_period_in_days, rsi_window_length):
       (combined_data["Change in OI"] + combined_data["Change in OI Next"]) * 100
   ) / (combined_data["Open Interest"] + combined_data["Open Interest Next"])
   combined_data["F9"] = (
-      combined_data["Number of Contracts"]
-      + combined_data["Number of Contracts Next"]
-  ) / (
-      (combined_data["Change in OI"] + combined_data["Change in OI Next"])
-      / lot_size
-  )
+      combined_data["Change in OI"] + combined_data["Change in OI Next"]
+  ) / lot_size
 
   combined_data["%Price Change"] = (
       np.log(combined_data["Close"] / combined_data["Prev Close"]) * 100
