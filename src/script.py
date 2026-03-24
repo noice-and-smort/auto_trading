@@ -230,8 +230,8 @@ def run_once(h, stock, time_period_in_days, rsi_window_length):
       combined_data["Change in OI"] + combined_data["Change in OI Next"]
   ) / lot_size
 
-  combined_data["%Price Change"] = (
-      np.log(combined_data["Close"] / combined_data["Prev Close"]) * 100
+  combined_data["Trend"] = (
+      ((0.5 * (combined_data["High"] + combined_data["Low"]) + combined_data["Close"]) * 0.5) - combined_data["Average Price"]
   )
 
   combined_data["RSI"] = rsi(combined_data["Close"], rsi_window_length)
@@ -262,7 +262,7 @@ def run_once(h, stock, time_period_in_days, rsi_window_length):
       "Change in OI",
       "F8",
       "F9",
-      "%Price Change",
+      "Trend",
       "RSI",
       "RSI Ratio",
   ]
