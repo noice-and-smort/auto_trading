@@ -62,6 +62,9 @@ Your script calculates several advanced derivative metrics to predict market sen
 - **F9 (Absolute OI Contract Change):** `(Change in OI + Change in OI Next) / lot_size`
   - *What it means:* The absolute net change in Open Interest, expressed in raw number of contracts.
   - *Market Prediction:* Provides the pure volume of newly added positions. Helpful for comparing positional aggression across different stocks regardless of their wildly different lot sizes.
+- **Trend:** `(((0.5 * (High + Low) + Close) * 0.5) - VWAP)`
+  - *What it means:* An intraday weighted momentum oscillator that contrasts the day's closing distribution against the daily Volume Weighted Average Price (VWAP).
+  - *Market Prediction:* If the Trend value is highly positive, it implies the stock closed fundamentally stronger than its intraday average, signifying late-day institutional buying. A negative trend implies late-day distribution and selling pressure.
 - **Deliverable Ratio:** `(Turnover * Deliverable) / (60-Day Avg Turnover * 60-Day Avg Deliverable)`
   - *What it means:* Compares today's actual delivery buying to its historical 60-day average.
   - *Market Prediction:* A ratio `> 1.0` (especially `> 1.5`) is a massive footprint of institutional accumulation/distribution. A spike here often precedes extremely strong directional moves.
