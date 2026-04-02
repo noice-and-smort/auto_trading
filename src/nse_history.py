@@ -89,7 +89,7 @@ class NSEHistory:
     return j
 
   @ut.cached(APP_NAME + '-option_chain')
-  def _option_chain(self, symbol, expiry_date):
+  def _option_chain(self, symbol, expiry_date, today_str=None):
     params = {
         'functionName': 'getOptionChainData',
         'symbol': symbol,
@@ -157,8 +157,8 @@ class NSEHistory:
     chunks = ut.pool(self._derivatives, params, max_workers=self.workers)
     return list(itertools.chain.from_iterable(chunks))
 
-  def oi_chain_raw(self, symbol, expiry_date=None):
-    payload = self._option_chain(symbol, expiry_date)
+  def oi_chain_raw(self, symbol, expiry_date=None, today_str=None):
+    payload = self._option_chain(symbol, expiry_date, today_str=today_str)
     return payload.get('data', [])
 
 
@@ -315,7 +315,9 @@ def oi_chain_df(h, symbol, expiry_date):
   ]
   oi_data = pd.DataFrame(columns=col_names)
 
-  data = h.oi_chain_raw(symbol, expiry_date)
+  from datetime import date
+  today_str = date.today().strftime('%Y-%m-%d')
+  data = h.oi_chain_raw(symbol, expiry_date, today_str=today_str)
   for item in data:
     oi_row = {}
     try:
