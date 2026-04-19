@@ -161,6 +161,41 @@ class NSEHistory:
     payload = self._option_chain(symbol, expiry_date, today_str=today_str)
     return payload.get('data', [])
 
+  @ut.cached(APP_NAME + '-bhavcopy_csv')
+  def _get_bhavcopy_csv(self, date_str):
+      url = f"https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{date_str}_F_0000.csv.zip"
+      headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+      try:
+          resp = self.s.get(url, headers=headers, timeout=10)
+          if resp.status_code == 200:
+              import zipfile, io
+              z = zipfile.ZipFile(io.BytesIO(resp.content))
+              file_names = z.namelist()
+              if len(file_names) > 0:
+                  with z.open(file_names[0]) as f:
+                      return f.read().decode('utf-8')
+      except Exception as e:
+          print(f"Failed to fetch Bhavcopy for {date_str}: {e}")
+      return None
+
+  def get_lot_size_from_bhavcopy(self, symbol):
+      from datetime import date, timedelta
+      import pandas as pd
+      from io import StringIO
+      
+      # Try up to 5 days back to find a valid trading day
+      for i in range(5):
+          d = date.today() - timedelta(days=i)
+          date_str = d.strftime('%Y%m%d')
+          csv_text = self._get_bhavcopy_csv(date_str)
+          if csv_text:
+              df = pd.read_csv(StringIO(csv_text))
+              df.columns = [c.strip() for c in df.columns]
+              symbol_df = df[df['TckrSymb'] == symbol]
+              if not symbol_df.empty:
+                  return float(symbol_df['NewBrdLotQty'].iloc[0])
+      return 1.0
+
 
 def stock_df(h, symbol, from_date, to_date, series='EQ'):
   stock_select_headers = [
