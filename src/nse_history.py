@@ -114,7 +114,7 @@ class NSEHistory:
       if csv_text and '"Date' in csv_text:
           dly_raw = pd.read_csv(StringIO(csv_text))
           dly_raw.columns = [c.strip() for c in dly_raw.columns]
-          dly_raw['join_date'] = pd.to_datetime(dly_raw['Date']).dt.date
+          dly_raw['join_date'] = pd.to_datetime(dly_raw['Date'], format='%d-%b-%Y').dt.date
           
           # Map percentage metric 
           join_dates = pd.to_datetime(dates_series).dt.date
