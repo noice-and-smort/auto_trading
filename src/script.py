@@ -3,7 +3,17 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 import logging
 import os
+import sys
 import warnings
+
+# Guarantee CWD is project root (crucial for Windows PyInstaller .exe execution)
+if getattr(sys, "frozen", False):
+  PROJECT_ROOT = os.path.dirname(sys.executable)
+else:
+  PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+os.chdir(PROJECT_ROOT)
+
 from dateutil.relativedelta import TU, relativedelta
 from nse_history import NSEHistory, derivatives_df, oi_chain_df, stock_df
 import numpy as np
@@ -333,20 +343,28 @@ def bulk_run():
   # get stocks
   h = NSEHistory()
   stocks = []
-  with open("data/stocks") as f:
+  stocks_file = "data/stocks"
+  if not os.path.exists(stocks_file):
+    logger.error(f"Watchlist file not found at {os.path.abspath(stocks_file)}")
+    print(f"ERROR: Watchlist file not found at {os.path.abspath(stocks_file)}")
+    return []
+
+  with open(stocks_file) as f:
     for line in f:
       if line.strip():
         stocks.append(line.strip())
-  
+
   with ThreadPoolExecutor(max_workers=10) as executor:
-      # Map returns results in the order of input iterable
-      results = executor.map(lambda stock: run(h, stock), stocks)
-      
+    # Map returns results in the order of input iterable
+    results = executor.map(lambda stock: run(h, stock), stocks)
+
   return list(results)
 
 
 if __name__ == "__main__":
   warnings.filterwarnings("ignore")
+  os.makedirs("output", exist_ok=True)
+  os.makedirs("data", exist_ok=True)
   parser = argparse.ArgumentParser(description="Run NSE derivatives analysis")
   parser.add_argument(
       "--email",

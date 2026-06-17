@@ -1,0 +1,41 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r req.txt
+
+      - name: Build Standalone EXE with PyInstaller
+        run: |
+          pyinstaller --onefile --name AutoTrading --collect-all jugaad_data --collect-all certifi --hidden-import=pandas --hidden-import=numpy --hidden-import=requests --hidden-import=dateutil src/script.py
+
+      - name: Prepare Windows Package Folder
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/AutoTrading_Windows/data
+          Copy-Item dist/AutoTrading.exe dist/AutoTrading_Windows/
+          Copy-Item data/stocks dist/AutoTrading_Windows/data/
+          Copy-Item .env.example dist/AutoTrading_Windows/.env
+          Copy-Item README.md dist/AutoTrading_Windows/
+
+      - name: Upload Windows EXE Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoTrading_Windows
+          path: dist/AutoTrading_Windows
