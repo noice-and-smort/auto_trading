@@ -2,6 +2,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 import logging
+import os
 import warnings
 from dateutil.relativedelta import TU, relativedelta
 from nse_history import NSEHistory, derivatives_df, oi_chain_df, stock_df
@@ -346,11 +347,23 @@ def bulk_run():
 
 if __name__ == "__main__":
   warnings.filterwarnings("ignore")
+  parser = argparse.ArgumentParser(description="Run NSE derivatives analysis")
+  parser.add_argument(
+      "--email",
+      action="store_true",
+      help="Send email notification with generated CSV",
+  )
+  args = parser.parse_args()
+
   d = datetime.now()
   ds = d.strftime("%Y.%m.%d")
   out_file = "output/combined_{}.csv".format(ds)
   stock_data_list = bulk_run()
   write_to_file(stock_data_list, out_file)
-  email_on = False
-  if email_on:
+
+  if args.email or os.environ.get("SEND_EMAIL", "").lower() in (
+      "true",
+      "1",
+      "yes",
+  ):
     send_email(out_file, ds)

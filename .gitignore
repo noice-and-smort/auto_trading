@@ -9,3 +9,4 @@ latest.csv
 test_*.py
 stocks
 test_api*.py
+*.log
