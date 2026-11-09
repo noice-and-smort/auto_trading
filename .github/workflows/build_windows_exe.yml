@@ -22,19 +22,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r req.txt
 
-      - name: Build Standalone EXE with PyInstaller
+      - name: Build Standalone EXEs with PyInstaller
         run: |
           pyinstaller --onefile --name AutoTrading --collect-all jugaad_data --collect-all certifi --hidden-import=pandas --hidden-import=numpy --hidden-import=requests --hidden-import=dateutil src/script.py
+          pyinstaller --onefile --name ClearCache --hidden-import=appdirs src/clear_cache.py
 
       - name: Prepare Windows Package Folder
         run: |
           New-Item -ItemType Directory -Force -Path dist/AutoTrading_Windows/data
           Copy-Item dist/AutoTrading.exe dist/AutoTrading_Windows/
+          Copy-Item dist/ClearCache.exe dist/AutoTrading_Windows/
           Copy-Item data/stocks dist/AutoTrading_Windows/data/
           Copy-Item .env.example dist/AutoTrading_Windows/.env
           Copy-Item README.md dist/AutoTrading_Windows/
-          Set-Content -Path dist/AutoTrading_Windows/Clear_Cache.bat -Value "@echo off`r`ncd /d `"%~dp0`"`r`nAutoTrading.exe --clear-cache-only`r`npause" -Encoding ASCII
-          Set-Content -Path dist/AutoTrading_Windows/Run_With_Clear_Cache.bat -Value "@echo off`r`ncd /d `"%~dp0`"`r`nAutoTrading.exe --clear-cache`r`npause" -Encoding ASCII
 
       - name: Upload Windows EXE Artifact
         uses: actions/upload-artifact@v4
