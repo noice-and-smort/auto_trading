@@ -8,6 +8,8 @@ on:
 jobs:
   build-windows-exe:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -41,3 +43,15 @@ jobs:
         with:
           name: AutoTrading_Windows
           path: dist/AutoTrading_Windows
+
+      - name: Publish Latest Release Asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Compress-Archive -Path dist/AutoTrading_Windows/* -DestinationPath dist/AutoTrading_Windows.zip -Force
+          gh release view latest >$null 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            gh release create latest dist/AutoTrading_Windows.zip --title "Latest Windows Build" --notes "Automatically updated Windows executable package (AutoTrading.exe + ClearCache.exe)."
+          } else {
+            gh release upload latest dist/AutoTrading_Windows.zip --clobber
+          }
