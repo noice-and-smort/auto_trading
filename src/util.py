@@ -91,6 +91,75 @@ def kw_to_fname(**kw):
 
 
 
+ALL_CACHE_APPS = [
+    "nsehistory-derivatives",
+    "nsehistory-stock",
+    "nsehistory-option_chain",
+    "nsehistory-deliverables",
+    "nsehistory-bhavcopy_csv",
+]
+
+
+def _is_valid_cache_value(val, kw=None):
+    """Returns True only if `val` is non-empty and complete enough to persist."""
+    if val is None:
+        return False
+    if isinstance(val, (list, dict, tuple, set)):
+        if len(val) == 0:
+            return False
+        if isinstance(val, dict) and "data" in val and not val["data"]:
+            return False
+        # If caching historical stock/derivatives up to a specific to_date,
+        # do not permanently cache if the run occurred on `to_date` before EOD
+        # data for `to_date` was published by NSE.
+        if kw and isinstance(val, list) and "to_date" in kw:
+            to_dt = kw["to_date"]
+            if isinstance(to_dt, date) and to_dt == date.today():
+                # Avoid locking in incomplete intraday/pre-settlement chunks on today's date
+                return False
+        return True
+    if isinstance(val, str):
+        if not val.strip():
+            return False
+        # Deliverables CSV must contain the header
+        if kw and "dates_series" not in kw and "from_date" in kw and '"Date' not in val and 'TckrSymb' not in val:
+            return False
+        if kw and "to_date" in kw:
+            to_dt = kw["to_date"]
+            if isinstance(to_dt, date) and to_dt == date.today():
+                return False
+        return True
+    return True
+
+
+def clear_all_caches():
+    """Empties all nsehistory cache directories safely. Returns list of cleared app names."""
+    import shutil
+    cleared = []
+    env_dir = os.environ.get("J_CACHE_DIR")
+    for app_name in ALL_CACHE_APPS:
+        cache_path = (
+            os.path.join(env_dir, app_name)
+            if env_dir
+            else user_cache_dir(app_name, app_name)
+        )
+        if not os.path.isdir(cache_path):
+            os.makedirs(cache_path, exist_ok=True)
+            cleared.append(app_name)
+            continue
+        for filename in os.listdir(cache_path):
+            file_path = os.path.join(cache_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception:
+                pass
+        cleared.append(app_name)
+    return cleared
+
+
 def cached(app_name):
     """
         Note to self:
@@ -109,15 +178,27 @@ def cached(app_name):
                 cache_dir = os.path.join(env_dir, app_name)
             file_name = kw_to_fname(**kw)
             path = os.path.join(cache_dir, file_name)
-            if not os.path.isfile(path):    
-                if not os.path.exists(cache_dir):
-                    os.makedirs(cache_dir, exist_ok=True)
-                j = function(**kw)
-                with open(path, 'wb') as fp:
-                    pickle.dump(j, fp)        
-            else:
-                with open(path, 'rb') as fp:
-                    j = pickle.load(fp)
+            if os.path.isfile(path):
+                try:
+                    with open(path, 'rb') as fp:
+                        j = pickle.load(fp)
+                    if _is_valid_cache_value(j, kw):
+                        return j
+                except Exception:
+                    pass
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+            if not os.path.exists(cache_dir):
+                os.makedirs(cache_dir, exist_ok=True)
+            j = function(**kw)
+            if _is_valid_cache_value(j, kw):
+                try:
+                    with open(path, 'wb') as fp:
+                        pickle.dump(j, fp)
+                except Exception:
+                    pass
             return j
         return wrapper
     return _cached

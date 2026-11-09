@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-from util import load_dotenv
+from util import clear_all_caches, load_dotenv
 load_dotenv(".env")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 
@@ -234,31 +234,9 @@ async def handle_text_message(update: Update, context: CallbackContext) -> None:
         f"User {user.first_name} ({user.id}) requested to empty the cache."
     )
     try:
-      app_names = [
-          "nsehistory-derivatives",
-          "nsehistory-stock",
-          "nsehistory-option_chain",
-          "nsehistory-deliverables",
-      ]
-      for app_name in app_names:
-        cache_path = user_cache_dir(app_name, app_name)
-        if not os.path.isdir(cache_path):
-          logger.error(f"Error: '{cache_path}' is not a valid directory.")
-          await update.message.reply_text(
-              "Sorry, there was an error emptying the cache."
-          )
-          await update.message.reply_markdown_v2(default_message)
-          return
-        for filename in os.listdir(cache_path):
-          file_path = os.path.join(cache_path, filename)
-          try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-              os.unlink(file_path)  # Remove file or symbolic link
-            elif os.path.isdir(file_path):
-              shutil.rmtree(file_path)  # Remove directory and all its contents
-          except Exception as e:
-            logger.error(f"Error emptying directory: {e}", exc_info=True)
-        logger.info(f"Cache emptied for {cache_path}.")
+      cleared_apps = clear_all_caches()
+      for app_name in cleared_apps:
+        logger.info(f"Cache emptied for {app_name}.")
         await update.message.reply_text(f"Cache emptied for {app_name}.")
     except Exception as e:
       logger.error(f"Error emptying cache: {e}", exc_info=True)

@@ -4,10 +4,11 @@ derivatives data from NSE and
 NSEIndices website
 """
 
+from datetime import datetime
 import itertools
 from io import StringIO
 from urllib.parse import urljoin
-from jugaad_data import util as ut
+import util as ut
 import pandas as pd
 from requests import Session
 
@@ -49,8 +50,31 @@ class NSEHistory:
 
   def _get(self, params):
     url = urljoin(self.base_url, self.path)
-    self.r = self.s.get(url, params=params, verify=self.ssl_verify)
+    self.r = self.s.get(url, params=params, verify=self.ssl_verify, timeout=15)
     return self.r
+
+  def get_active_expiry_dates(self, symbol):
+    """Fetches active expiry dates (as datetime.date objects) directly from NSE dropdown API."""
+    params = {
+        'functionName': 'getOptionChainDropdown',
+        'symbol': symbol,
+    }
+    try:
+      r = self._get(params)
+      if r.status_code == 200:
+        j = r.json()
+        raw_dates = j.get('expiryDates', [])
+        parsed = []
+        for d_str in raw_dates:
+          try:
+            parsed.append(datetime.strptime(d_str.strip(), '%d-%b-%Y').date())
+          except ValueError:
+            pass
+        if parsed:
+          return sorted(parsed)
+    except Exception:
+      pass
+    return []
 
   @ut.cached(APP_NAME + '-stock')
   def _stock(self, symbol, from_date, to_date, series='EQ'):

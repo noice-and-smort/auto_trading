@@ -19,33 +19,47 @@ from nse_history import NSEHistory, derivatives_df, oi_chain_df, stock_df
 import numpy as np
 import pandas as pd
 from send_email import send_email
+from util import clear_all_caches
 
 logger = logging.getLogger(__name__)
 
 
 def get_option_data(h, symbol, expiry_date="latest"):
+  candidate_expiries = []
   if expiry_date == "latest":
-    expiry_date = get_expiry_with_offset(date.today())
-  
-  retries = 0
-  while retries < 7:
-    try:
-      oi_data = oi_chain_df(h, symbol, expiry_date)
-      if oi_data.empty:
-        expiry_date = expiry_date - relativedelta(days=1)
-        retries += 1
-        continue
-        
-      options_dict = {}
-      options_dict["F1"] = (
-          oi_data["PUTS CHANGE IN OI"].sum() / oi_data["CALLS CHANGE IN OI"].sum()
-      )
-      options_dict["F2"] = oi_data["PUTS OI"].dot(
-          oi_data["PUTS LAST PRICE"]
-      ) / oi_data["CALLS OI"].dot(oi_data["CALLS LAST PRICE"])
-      return options_dict
-    except (ZeroDivisionError, KeyError):
-      return {"F1": 0, "F2": 0}
+    active_expiries = h.get_active_expiry_dates(symbol)
+    today = date.today()
+    for exp in active_expiries:
+      if exp >= today:
+        candidate_expiries.append(exp)
+    # Also include calendar fallback candidates (current and next month)
+    for off in (0, 1):
+      cal_exp = get_expiry_with_offset(today, off)
+      if cal_exp not in candidate_expiries:
+        candidate_expiries.append(cal_exp)
+  else:
+    candidate_expiries.append(expiry_date)
+
+  for base_exp in candidate_expiries:
+    curr_exp = base_exp
+    for _ in range(7):
+      try:
+        oi_data = oi_chain_df(h, symbol, curr_exp)
+        if oi_data.empty:
+          curr_exp = curr_exp - relativedelta(days=1)
+          continue
+
+        options_dict = {}
+        options_dict["F1"] = (
+            oi_data["PUTS CHANGE IN OI"].sum()
+            / oi_data["CALLS CHANGE IN OI"].sum()
+        )
+        options_dict["F2"] = oi_data["PUTS OI"].dot(
+            oi_data["PUTS LAST PRICE"]
+        ) / oi_data["CALLS OI"].dot(oi_data["CALLS LAST PRICE"])
+        return options_dict
+      except (ZeroDivisionError, KeyError):
+        return {"F1": 0, "F2": 0}
 
   return {"F1": 0, "F2": 0}
 
@@ -58,12 +72,16 @@ def rsi(close, periods=14):
   ma_down = down.rolling(window=periods).mean()
   old = True
   for i in range(len(close)):
-    if ~np.isnan(ma_up[i]) and ~np.isnan(ma_down[i]):
+    if ~np.isnan(ma_up.iloc[i]) and ~np.isnan(ma_down.iloc[i]):
       old = False
     if not old:
-      if ~np.isnan(ma_up[i - 1]) and ~np.isnan(ma_down[i - 1]):
-        ma_up[i] = (ma_up[i - 1] * (periods - 1) + up[i]) / periods
-        ma_down[i] = (ma_down[i - 1] * (periods - 1) + down[i]) / periods
+      if ~np.isnan(ma_up.iloc[i - 1]) and ~np.isnan(ma_down.iloc[i - 1]):
+        ma_up.iloc[i] = (
+            ma_up.iloc[i - 1] * (periods - 1) + up.iloc[i]
+        ) / periods
+        ma_down.iloc[i] = (
+            ma_down.iloc[i - 1] * (periods - 1) + down.iloc[i]
+        ) / periods
 
   rsi = ma_up / ma_down
   rsi = 100 - (100 / (1 + rsi))
@@ -80,22 +98,30 @@ def get_RSI_ratio(close, RSI):
   return ratio
 
 
-def get_expiry_with_offset(dt, offset=0):
+def get_expiry_with_offset(dt, offset=0, known_expiries=None):
   expiry_dates = []
   for i in range(offset + 3):
-    expiry_dates.append(dt + relativedelta(day=31, months=i, weekday=TU(-1)))
+    cand = dt + relativedelta(day=31, months=i, weekday=TU(-1))
+    if known_expiries:
+      for k in known_expiries:
+        if k.year == cand.year and k.month == cand.month:
+          cand = k
+          break
+    expiry_dates.append(cand)
   if expiry_dates[0] >= dt:
     return expiry_dates[offset]
   else:
     return expiry_dates[offset + 1]
 
 
-def get_date_splits(dt_start, dt_end):
+def get_date_splits(dt_start, dt_end, known_expiries=None):
   splits = []
   curr_date = dt_start
   while curr_date <= dt_end:
-    if get_expiry_with_offset(curr_date) <= dt_end:
-      expiry_date = get_expiry_with_offset(curr_date)
+    expiry_date = get_expiry_with_offset(
+        curr_date, 0, known_expiries=known_expiries
+    )
+    if expiry_date <= dt_end:
       splits.append([curr_date, expiry_date])
       curr_date = expiry_date + timedelta(days=1)
     else:
@@ -105,6 +131,7 @@ def get_date_splits(dt_start, dt_end):
 
 
 def get_future_data_for_date(h, stock, start_date, end_date, expiry_date):
+  orig_expiry = expiry_date
   try:
     future_data_for_date = derivatives_df(
         h,
@@ -115,8 +142,14 @@ def get_future_data_for_date(h, stock, start_date, end_date, expiry_date):
     )
   except KeyError:
     future_data_for_date = pd.DataFrame()
-  while future_data_for_date.empty and expiry_date > start_date:
+  retries = 0
+  while (
+      future_data_for_date.empty
+      and retries < 7
+      and expiry_date > start_date - timedelta(days=5)
+  ):
     expiry_date = expiry_date - relativedelta(days=1)
+    retries += 1
     try:
       future_data_for_date = derivatives_df(
           h,
@@ -130,15 +163,47 @@ def get_future_data_for_date(h, stock, start_date, end_date, expiry_date):
   return format_df(future_data_for_date, True)
 
 
-def get_future_data(h, stock, start_date, end_date, offset):
-  splits = get_date_splits(start_date, end_date)
-  future_data = [
-      get_future_data_for_date(
-          h, stock, d[0], d[1], expiry_date=get_expiry_with_offset(d[0], offset)
+def get_future_data(
+    h, stock, start_date, end_date, offset, known_expiries=None
+):
+  splits = get_date_splits(
+      start_date, end_date, known_expiries=known_expiries
+  )
+  future_data = []
+  for idx, d in enumerate(splits):
+    exp = get_expiry_with_offset(d[0], offset, known_expiries=known_expiries)
+    df = get_future_data_for_date(h, stock, d[0], d[1], expiry_date=exp)
+    if not df.empty:
+      # Determine actual resolved expiry date from the returned contract
+      actual_exp = pd.to_datetime(df["EXPIRY"].iloc[-1]).date()
+      # If the contract expired earlier than the calendar split end d[1] (e.g. Monday holiday shift),
+      # fetch the remaining days [actual_exp + 1, d[1]] using the next month's contract!
+      if actual_exp < d[1]:
+        rem_start = actual_exp + timedelta(days=1)
+        if rem_start <= d[1]:
+          next_exp = get_expiry_with_offset(
+              d[0], offset + 1, known_expiries=known_expiries
+          )
+          rem_df = get_future_data_for_date(
+              h, stock, rem_start, d[1], expiry_date=next_exp
+          )
+          if not rem_df.empty:
+            df = pd.concat([df, rem_df])
+    elif d[0] <= d[1]:
+      # If df was completely empty (e.g., split started on the Tuesday holiday after Monday expiry),
+      # fall forward to the next month's contract for this split.
+      next_exp = get_expiry_with_offset(
+          d[0], offset + 1, known_expiries=known_expiries
       )
-      for d in splits
-  ]
-  future_data_concat = pd.concat(future_data)
+      df = get_future_data_for_date(
+          h, stock, d[0], d[1], expiry_date=next_exp
+      )
+    future_data.append(df)
+
+  non_empty = [df for df in future_data if not df.empty]
+  if not non_empty:
+    return pd.DataFrame()
+  future_data_concat = pd.concat(non_empty)
   future_data_concat = future_data_concat[
       ~future_data_concat.index.duplicated(keep="first")
   ]
@@ -170,11 +235,22 @@ def run_once(h, stock, time_period_in_days, rsi_window_length):
       series="EQ",
   )
   cash_data = format_df(cash_data)
+  known_expiries = h.get_active_expiry_dates(stock)
   future_data_current = get_future_data(
-      h, stock, date_today - timedelta(days=time_period_in_days), date_today, 0
+      h,
+      stock,
+      date_today - timedelta(days=time_period_in_days),
+      date_today,
+      0,
+      known_expiries=known_expiries,
   )
   future_data_next = get_future_data(
-      h, stock, date_today - timedelta(days=time_period_in_days), date_today, 1
+      h,
+      stock,
+      date_today - timedelta(days=time_period_in_days),
+      date_today,
+      1,
+      known_expiries=known_expiries,
   )
   average_turnrover = cash_data["VALUE"].mean()
   average_deliverable = cash_data["DELIVERABLE"].mean() / 100
@@ -341,7 +417,6 @@ def run(h, stock, time_period_in_days=60, rsi_window_length=14):
 
 def bulk_run():
   # get stocks
-  h = NSEHistory()
   stocks = []
   stocks_file = "data/stocks"
   if not os.path.exists(stocks_file):
@@ -355,8 +430,8 @@ def bulk_run():
         stocks.append(line.strip())
 
   with ThreadPoolExecutor(max_workers=10) as executor:
-    # Map returns results in the order of input iterable
-    results = executor.map(lambda stock: run(h, stock), stocks)
+    # Use a fresh NSEHistory session per worker call to avoid thread-unsafe Session mutation
+    results = executor.map(lambda stock: run(NSEHistory(), stock), stocks)
 
   return list(results)
 
@@ -371,7 +446,23 @@ if __name__ == "__main__":
       action="store_true",
       help="Send email notification with generated CSV",
   )
+  parser.add_argument(
+      "--clear-cache",
+      action="store_true",
+      help="Clear all cached NSE data before running",
+  )
+  parser.add_argument(
+      "--clear-cache-only",
+      action="store_true",
+      help="Clear all cached NSE data and exit immediately",
+  )
   args = parser.parse_args()
+
+  if args.clear_cache or args.clear_cache_only:
+    cleared = clear_all_caches()
+    print(f"Cleared NSE cache for: {', '.join(cleared)}")
+    if args.clear_cache_only:
+      sys.exit(0)
 
   d = datetime.now()
   ds = d.strftime("%Y.%m.%d")
